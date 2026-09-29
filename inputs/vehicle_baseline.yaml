@@ -1,0 +1,277 @@
+# Baseline vehicle physical data
+#
+# >>> VEHICLE: Orpheus & Eurydice (OE) <<<
+#
+# OE is the two-stage PROTOTYPE for ATLAS. Every number in this file describes
+# OE, NOT ATLAS. ATLAS is still in design; its numbers do not exist yet. Do not
+# cite anything here as an ATLAS figure, and do not let OE results be reported
+# as ATLAS performance. The design intent is for ATLAS to stay as close to OE as
+# possible, which is why OE is the study subject.
+#
+# Fill in what the team has. Leave TBD where it is genuinely unknown; the code
+# treats TBD as "unknown", never as a default, and reports it as an assumption.
+#
+# UNITS: every key carries its unit as a suffix. All internal math is SI.
+# PROVENANCE: `source` = where the number came from (CAD file, weighed part,
+#             RASAero/OpenRocket export, estimate + who estimated it).
+
+meta:
+  vehicle_name: "Orpheus & Eurydice"
+  vehicle_short: OE
+  program: ATLAS
+  relationship_to_program: "two-stage prototype for ATLAS; ATLAS design in progress"
+  revision: 1
+  date: TBD
+  owner: TBD
+  notes: "Diameters provisionally fixed per handoff, pending team confirmation."
+
+  # Mass properties come from three separate Fusion exports; see
+  # tools/fusion_export_mass_properties.py
+  cad_sources:
+    full_assembly: TBD      # mass_properties_<name>.json
+    stage_1: TBD
+    stage_2: TBD
+    reconciliation_checked: false
+
+# ---------------------------------------------------------------------------
+# GLOBAL / SHARED
+# ---------------------------------------------------------------------------
+global:
+  body_diameter_m: 0.1016          # 4.000 in — confirm both stages identical
+  body_diameter_source: "handoff: '4-inch to 4-inch', provisional"
+
+  # Is there ANY diameter change anywhere (boattail, interstage step)?
+  # If yes, Barrowman needs the transition geometry.
+  has_transitions: false
+  transitions: TBD
+
+  launch_site:
+    elevation_m_asl: TBD
+    rail_length_m: TBD
+    rail_angle_deg_from_vertical: 0.0   # 1 DOF assumes vertical; recorded for later 6 DOF
+    source: TBD
+
+# ---------------------------------------------------------------------------
+# DRAG  — the single largest driver of predicted apogee. HIGHEST PRIORITY.
+# ---------------------------------------------------------------------------
+# Provide CD vs Mach for each configuration. Base drag differs power-on vs
+# power-off, so they are listed separately. An OpenRocket CD export is fine.
+drag:
+  source: TBD                      # OpenRocket / CFD / wind tunnel / estimate
+  reference_area_m2: TBD           # leave TBD to auto-compute from body_diameter_m
+  uncertainty_multiplier_range: [0.8, 1.2]   # report apogee across this band
+
+  stack_power_on:                  # both stages mated, S1 burning
+    mach:  TBD                     # e.g. [0.0, 0.3, 0.6, 0.8, 0.9, 1.0, 1.2, 1.5, 2.0, 3.0]
+    cd:    TBD
+  stack_power_off:                 # both stages mated, coasting
+    mach:  TBD
+    cd:    TBD
+  stage2_power_on:                 # sustainer alone, S2 burning
+    mach:  TBD
+    cd:    TBD
+  stage2_power_off:                # sustainer alone, coasting to apogee
+    mach:  TBD
+    cd:    TBD
+
+# ---------------------------------------------------------------------------
+# STAGE 1  (booster — no control surfaces per handoff)
+# ---------------------------------------------------------------------------
+stage_1:
+  # Non-motor structure. Station datum = vehicle nose tip, positive aft.
+  # Give length AND mass for each section you have; the code builds CG and I_yy
+  # from this list by parallel-axis summation.
+  sections:
+    - name: interstage_coupler
+      length_m: TBD
+      mass_kg: TBD
+      cg_from_section_front_m: TBD
+      source: TBD
+    - name: motor_airframe
+      length_m: TBD               # may be derived from motor length + margin
+      mass_kg: TBD                # or give airframe_mass_per_length_kg_m below
+      cg_from_section_front_m: TBD
+      source: TBD
+    - name: thrust_structure
+      length_m: TBD
+      mass_kg: TBD
+      cg_from_section_front_m: TBD
+      source: TBD
+
+  airframe_mass_per_length_kg_m: TBD   # alternative to per-section masses
+  separation_hardware_mass_kg: TBD
+
+  motor:
+    propellant_mass_kg: TBD            # DESIGN VARIABLE — bounded [?, 12.44]
+    max_motor_length_m: 1.3208         # 52 in — CONFIRMED applies to both motors
+    source: "kraken.py, unvalidated while Kraken is being built"
+
+    # Stage 1 ignites at sea level, so its nozzle must stay near-matched or the
+    # flow separates. Design altitude is FIXED at the launch site, not varied.
+    nozzle_design_altitude_m: 0.0
+    nozzle_design_altitude_status: fixed
+    # Throat diameter is DERIVED from propellant mass, not chosen. See the
+    # shared note under stage_2.motor.
+    throat_diameter_m: derived
+    expansion_ratio: derived           # 5.52 when designed at sea level
+
+  fins:
+    count: 4                           # FIXED per handoff — do not change
+    has_control_surfaces: false        # FIXED per handoff
+    root_chord_m: TBD
+    tip_chord_m: TBD
+    semi_span_m: TBD                   # exposed, root to tip
+    sweep_length_m: TBD                # LE sweep, axial distance root LE to tip LE
+    thickness_m: TBD
+    station_root_le_from_aft_end_m: TBD
+    cross_section: TBD                 # flat / beveled / airfoil (NACA xxxx)
+    material:
+      name: TBD
+      youngs_modulus_pa: TBD
+      shear_modulus_pa: TBD
+      density_kg_m3: TBD
+      layup: TBD                       # if composite, the actual laminate
+      source: TBD
+    # Best case for flutter: measured or FEA modal properties. If you have
+    # these, the 1/k Theodorsen method uses them directly instead of inferring
+    # stiffness from material + thickness.
+    modal:
+      bending_freq_hz: TBD
+      torsion_freq_hz: TBD
+      source: TBD
+    root_attachment: TBD               # through-wall tab / surface mount / other
+                                       # root fixity strongly affects V_flutter
+
+# ---------------------------------------------------------------------------
+# STAGE 2  (sustainer — carries the control surfaces)
+# ---------------------------------------------------------------------------
+stage_2:
+  nosecone:
+    shape: TBD                         # conical / tangent ogive / Von Karman / LV-Haack
+    length_m: TBD
+    mass_kg: TBD
+    cg_from_tip_m: TBD
+    tip_material: TBD                  # matters if aero heating gets checked later
+    source: TBD
+
+  sections:
+    - name: payload_bay
+      length_m: TBD
+      mass_kg: TBD                     # include the payload itself
+      cg_from_section_front_m: TBD
+      source: TBD
+    - name: avionics_bay
+      length_m: TBD
+      mass_kg: TBD
+      cg_from_section_front_m: TBD
+      source: TBD
+    - name: recovery_bay
+      length_m: TBD
+      mass_kg: TBD                     # chutes + harness + charges + hardware
+      cg_from_section_front_m: TBD
+      source: TBD
+    - name: motor_airframe
+      length_m: TBD
+      mass_kg: TBD
+      cg_from_section_front_m: TBD
+      source: TBD
+
+  airframe_mass_per_length_kg_m: TBD
+  actuator_system_mass_kg: TBD         # servos, linkages, battery for control surfaces
+
+  motor:
+    propellant_mass_kg: TBD            # DESIGN VARIABLE — bounded [?, 12.44]
+    max_motor_length_m: 1.3208         # 52 in — CONFIRMED applies to both motors
+    source: "kraken.py, unvalidated"
+
+    # S2 ignites at altitude so it can be expanded past sea-level match, but the
+    # benefit SATURATES: at 12.44 kg the casing bore caps eps at ~14.95, which is
+    # already reached by a ~10 km design altitude. Designing for 25 km or 40 km
+    # gives an identical nozzle and identical apogee. So this is NOT a useful
+    # continuous design variable — it is a single fixed choice: expand to the
+    # bore limit. Worth ~+5 km of apogee vs a sea-level-matched nozzle.
+    nozzle_design_altitude_m: 10000.0
+    nozzle_design_altitude_status: fixed
+    nozzle_design_rule: "expand to bore limit, subject to no-separation at ignition"
+    nozzle_source: "derived 2026-09-26; saturation confirmed by sweep"
+    throat_diameter_m: derived
+    expansion_ratio: derived
+
+    # ---- SHARED NOZZLE NOTE (applies to both stages) ----
+    # Both motors are Kraken: same casing, same grain cross-section, same
+    # propellant, same 38 bar chamber pressure, same 9.78 s burn time. Only the
+    # propellant mass (hence grain length) differs.
+    #
+    # They CANNOT share a nozzle. The grain is a core burner, so burn area
+    # scales with grain length; with a common throat, chamber pressure scales as
+    # (A_b/A_t)^(1/(1-n)). A 2x length difference already implies ~110 bar and
+    # the full design range implies >600 bar against a 38 bar design point.
+    # Each stage therefore needs its own throat, sized to hold 38 bar at its own
+    # mass flow. Throat diameters span 0.39-0.97 in across the mass range, and
+    # the contour is geometrically similar, so this is cheap hardware.
+    nozzles_shared: false
+    nozzles_shared_source: "derived from kraken.py grain geometry, 2026-09-26"
+
+    max_exit_diameter_m: 0.0953        # 3.75 in casing bore — hard packaging cap
+    min_pe_over_pa_at_ignition: 0.4    # Summerfield flow-separation criterion
+
+    # ---- GRAIN CONFIGURATION — needs propulsion team confirmation ----
+    # kraken.py assumes constant mass flow (neutral burn). A single tubular core
+    # burner going from 1.0 in to 3.75 in core diameter is strongly PROGRESSIVE:
+    # burn area grows ~3.75x through the burn, so real thrust would rise
+    # substantially toward burnout. That does not change total impulse or apogee
+    # much, but it moves peak acceleration and peak dynamic pressure later and
+    # higher, which directly affects the flutter and structural checks.
+    grain_configuration: TBD           # single tubular / BATES segments / other
+    predicted_thrust_curve: TBD        # request from propulsion; replaces the
+                                       # constant-mdot assumption entirely
+    thrust_curve_source: TBD
+
+  fins:
+    count: 4                           # FIXED per handoff
+    has_control_surfaces: true
+    n_fins_with_control_surfaces: 4    # CONFIRMED: all four
+    n_fins_with_control_surfaces_source: "user, 2026-09-26"
+    root_chord_m: TBD
+    tip_chord_m: TBD
+    semi_span_m: TBD
+    sweep_length_m: TBD
+    thickness_m: TBD
+    station_root_le_from_aft_end_m: TBD
+    cross_section: TBD
+    material:
+      name: TBD
+      youngs_modulus_pa: TBD
+      shear_modulus_pa: TBD
+      density_kg_m3: TBD
+      layup: TBD
+      source: TBD
+    modal:
+      bending_freq_hz: TBD
+      torsion_freq_hz: TBD
+      source: TBD
+    root_attachment: TBD
+
+    # These fins are the flutter-critical set: they see the vehicle's max
+    # velocity at low density AND carry a movable surface that adds a third
+    # DOF the Theodorsen/Kearns methods do not model. Recorded so the report
+    # can state the limitation explicitly.
+    control_surface:
+      hinge_line_from_fin_le_frac: TBD   # fraction of local chord
+      surface_chord_frac: TBD
+      surface_span_frac: TBD
+      surface_mass_kg: TBD
+      surface_cg_aft_of_hinge_m: TBD     # mass balance about the hinge
+      actuator_rotational_stiffness_nm_rad: TBD
+      max_deflection_deg: TBD
+      source: TBD
+
+# ---------------------------------------------------------------------------
+# EVENT TIMING  (design variables, bounds TBD)
+# ---------------------------------------------------------------------------
+events:
+  t_separation_after_burnout_s: TBD    # DESIGN VARIABLE
+  t_ignition_after_separation_s: TBD   # DESIGN VARIABLE
+  max_allowed_coast_s: TBD             # 1 DOF cannot verify pitch-back during coast
+  separation_mechanism: TBD
+  ignition_method: TBD

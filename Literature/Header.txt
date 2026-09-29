@@ -1,0 +1,14 @@
+Flutter Literature Collection
+Compiled by Alexander Ketzle for the improvement of understanding
+Enjoy!
+
+"
+as far as analytical methods go:
+TN4197 - do not use
+Bennett's correction (hosted on Nakka's website) - do not use
+1/k method w/ theodorsen function (NACA TR685/496) - Usable subsonic, can use correction in 685 to push it to M=0.8, beyond that gets rough
+U vs. g method w/ theodorsen function - same as above
+Kearns Supersonic - useable above M=1
+these won't be perfect and the "right" way to do it is to model the entire vehicle for NASTRAN SOL 145 but that's a bit extreme
+
+"
