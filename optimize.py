@@ -25,8 +25,6 @@ def main(argv=None):
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--output", type=Path, default=Path("optimization_result.json"))
     parser.add_argument("--atmosphere", choices=("isa", "isa-tail", "constant"))
-    parser.add_argument("--stage1-motor", type=Path)
-    parser.add_argument("--stage2-motor", type=Path)
     parser.add_argument("--drag", help="Replacement drag callback as module:function")
     parser.add_argument("--drag-id", help="Version/settings identifier for custom drag and its data")
     args = parser.parse_args(argv)
@@ -36,8 +34,7 @@ def main(argv=None):
     unknown = set(data) - {"fixed_inputs", "initial_design", "simulation", "stability"}
     if unknown:
         parser.error(f"Unknown configuration sections: {sorted(unknown)}")
-    builder = CandidateBuilder(VehicleConfig(**data.get("fixed_inputs", {})),
-                               args.stage1_motor, args.stage2_motor)
+    builder = CandidateBuilder(VehicleConfig(**data.get("fixed_inputs", {})))
     initial = Design(**data.get("initial_design", {}))
     initial.validate()
     settings = SimulationSettings(**data.get("simulation", {}))
@@ -68,8 +65,7 @@ def main(argv=None):
               "initial_design": asdict(initial), "simulation_settings": asdict(settings),
               "stability_limits": {"minimum": constraint.minimum, "maximum": constraint.maximum},
               "model_identifier": identifier,
-              "motor_files": {"stage1": str(builder.stage1_motor.path),
-                              "stage2": str(builder.stage2_motor.path)},
+              "motor_model": identifier["propulsion"],
               "optimizer_settings": {"method": "SLSQP", "variable_scaling": "bounds to [0,1]",
                                      "apogee_scale_m": objective.apogee_scale, **solver_options},
               "initial_result": first, "optimizer": None}

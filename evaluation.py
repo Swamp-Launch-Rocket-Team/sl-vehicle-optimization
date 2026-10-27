@@ -41,19 +41,16 @@ class SimulationSettings:
 
 
 def model_identifier(builder, drag_model=constant_drag, drag_identifier=None):
-    """Fingerprint source, motor bytes, and dependencies once per run.
+    """Fingerprint source and dependencies once per run.
 
     For custom drag, drag_identifier must describe external tables/settings;
     update it whenever those inputs change. Do not modify models mid-run.
     """
     folder = Path(__file__).resolve().parent
-    names = ("candidate.py", "evaluation.py", "thrust_curve.py", "two_dof.py",
+    names = ("candidate.py", "evaluation.py", "two_dof.py",
              "atmosphere.py", "mass_model.py", "vehicle.py", "geometry.py",
              "stability_barrowman.py", "fin_cp.py", "kraken.py")
     files = {name: sha256((folder/name).read_bytes()).hexdigest() for name in names}
-    for name, motor in (("stage1_motor", builder.stage1_motor),
-                        ("stage2_motor", builder.stage2_motor)):
-        files[name] = sha256(motor.path.read_bytes()).hexdigest()
     if drag_model is not constant_drag:
         if not drag_identifier:
             raise ValueError("Custom drag requires an explicit drag_identifier.")
@@ -61,6 +58,7 @@ def model_identifier(builder, drag_model=constant_drag, drag_identifier=None):
         if source:
             files["drag_source"] = sha256(Path(source).read_bytes()).hexdigest()
     return {"source_hashes": files, "drag": drag_identifier or "placeholder-cd-0.5",
+            "propulsion": "kraken",
             "numpy": np.__version__, "scipy": scipy.__version__,
             "stability": "OR-document-zero-AoA; linear-force-bridge-M0.8-1.2"}
 
@@ -135,8 +133,16 @@ def evaluate_candidate(values, *, builder: CandidateBuilder, settings: Simulatio
                       apogee_time_s=float(trajectory.time[-1]),
                       max_sampled_mach=float(trajectory.mach.max()),
                       max_sampled_airspeed_m_s=float(trajectory.airspeed.max()),
-                      motor_data={"stage1": builder.stage1_motor.summary(),
-                                  "stage2": builder.stage2_motor.summary()},
+                      motor_data={name: {
+                          "model": "kraken",
+                          "diameter_m": motor.motor_diameter,
+                          "length_m": motor.motor_length,
+                          "wet_mass_kg": motor.wet_mass,
+                          "dry_mass_kg": motor.dry_mass,
+                          "propellant_mass_kg": motor.p_mass,
+                          "burn_time_s": motor.burn_time,
+                      } for name, motor in (("stage1", vehicle.booster_stage.motor.motor),
+                                            ("stage2", vehicle.upper_stage.motor.motor))},
                       stability=_stability_profiles(vehicle, trajectory))
         result["atmosphere_tail_used"] = bool(
             settings.atmosphere == "isa-tail"

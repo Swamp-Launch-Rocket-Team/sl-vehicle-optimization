@@ -1,15 +1,14 @@
-"""Build a fresh vehicle from ten dimensions and fixed hardware inputs."""
+"""Vehicle design variables and construction from fixed hardware inputs."""
 
 from dataclasses import asdict, dataclass
 from math import acos, pi, radians, sin, sqrt, tan
-from pathlib import Path
 
 import numpy as np
 
 from geometry import AxisymmetricSection, FinSet
+from kraken import Kraken
 from mass_model import (FinMassComponent, FixedMassComponent, GeometryOnlyComponent,
                         MotorMassComponent, ShellMassComponent)
-from thrust_curve import ThrustCurve
 from vehicle import Vehicle, VehicleStage
 
 INCH = 0.0254
@@ -27,6 +26,8 @@ VARIABLE_BOUNDS = {
     "stage2_sweep_deg": (63.0, 68.0),
     "stage1_span_in": (6.0, 7.0),
     "stage2_span_in": (4.0, 5.0),
+    "stage1_propellant_mass_lb": (14.0, 16.0),
+    "stage2_propellant_mass_lb": (14.0, 16.0),
 }
 
 
@@ -46,6 +47,8 @@ class Design:
     stage2_sweep_deg: float = 65.5
     stage1_span_in: float = 6.5
     stage2_span_in: float = 4.5
+    stage1_propellant_mass_lb: float = 15.0
+    stage2_propellant_mass_lb: float = 15.0
 
     def validate(self):
         for name, (lower, upper) in VARIABLE_BOUNDS.items():
@@ -61,7 +64,9 @@ class Design:
     def from_normalized(cls, values):
         values = np.asarray(values, dtype=float)
         if values.shape != (len(VARIABLE_BOUNDS),) or not np.isfinite(values).all():
-            raise InvalidCandidate("Expected ten finite normalized design variables.")
+            raise InvalidCandidate(
+                f"Expected {len(VARIABLE_BOUNDS)} finite normalized design variables."
+            )
         if np.any((values < 0) | (values > 1)):
             raise InvalidCandidate("Normalized design variables must lie in [0, 1].")
         return cls(**{name: float(lo + value * (hi - lo))
@@ -104,18 +109,17 @@ class VehicleConfig:
 
 
 class CandidateBuilder:
-    def __init__(self, config=None, stage1_motor=None, stage2_motor=None):
+    def __init__(self, config=None):
         self.config = config or VehicleConfig()
-        folder = Path(__file__).resolve().parent / "motors"
-        self.stage1_motor = ThrustCurve(stage1_motor or folder / "Kraken-34-3476.eng")
-        self.stage2_motor = ThrustCurve(stage2_motor or folder / "KVac-14-1431.eng")
-        burnout = self.config.booster_ignition_time_s + self.stage1_motor.burn_time
+        burnout = self.config.booster_ignition_time_s + Kraken.burn_time
         if self.config.separation_time_s < burnout:
             raise ValueError("Separation must occur at or after booster burnout.")
 
     def build(self, design: Design) -> Vehicle:
         design.validate()
         c = self.config
+        stage1_motor = Kraken(propellant_mass=design.stage1_propellant_mass_lb * POUND)
+        stage2_motor = Kraken(propellant_mass=design.stage2_propellant_mass_lb * POUND)
         radius = c.outer_diameter_in * INCH / 2
         wall = (c.outer_diameter_in - c.inner_diameter_in) * INCH / 2
         nose_length = design.nose_length_in * INCH
@@ -136,9 +140,9 @@ class CandidateBuilder:
                 length=length, radius_at_axial_distance=lambda x: radius))
 
         upper_motor_start = nose_length + upper_length
-        upper_aft = upper_motor_start + self.stage2_motor.motor_length
+        upper_aft = upper_motor_start + stage2_motor.motor_length
         booster_motor_start = upper_aft + booster_length
-        booster_aft = booster_motor_start + self.stage1_motor.motor_length
+        booster_aft = booster_motor_start + stage1_motor.motor_length
 
         def fins(root_in, span_in, sweep_deg, taper, aft, density):
             root, span = root_in * INCH, span_in * INCH
@@ -153,11 +157,11 @@ class CandidateBuilder:
 
         upper = VehicleStage(
             body_sections=(shell(upper_length, lambda x: radius, c.carbon_density_oz_in3),
-                           casing(self.stage2_motor.motor_length)),
+                           casing(stage2_motor.motor_length)),
             fin_sets=(fins(design.stage2_root_chord_in, design.stage2_span_in,
                            design.stage2_sweep_deg, c.stage2_taper_ratio, upper_aft,
                            c.stage2_fin_density_oz_in3),),
-            motor=MotorMassComponent(motor=self.stage2_motor,
+            motor=MotorMassComponent(motor=stage2_motor,
                 forward_axial_position=upper_motor_start,
                 ignition_time=c.separation_time_s + design.coast_time_s),
             fixed_components=(
@@ -167,11 +171,11 @@ class CandidateBuilder:
                                    center_of_mass=nose_length+upper_length/2)))
         booster = VehicleStage(
             body_sections=(shell(booster_length, lambda x: radius, c.fiberglass_density_oz_in3),
-                           casing(self.stage1_motor.motor_length)),
+                           casing(stage1_motor.motor_length)),
             fin_sets=(fins(design.stage1_root_chord_in, design.stage1_span_in,
                            design.stage1_sweep_deg, c.stage1_taper_ratio, booster_aft,
                            c.stage1_fin_density_oz_in3),),
-            motor=MotorMassComponent(motor=self.stage1_motor,
+            motor=MotorMassComponent(motor=stage1_motor,
                 forward_axial_position=booster_motor_start,
                 ignition_time=c.booster_ignition_time_s),
             fixed_components=(FixedMassComponent(mass=c.stage1_internal_mass_lb*POUND,

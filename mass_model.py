@@ -10,7 +10,6 @@ import numpy as np
 
 from geometry import AxisymmetricSection, FinSet
 from kraken import Kraken
-from thrust_curve import ThrustCurve
 
 
 def _require_positive(value: float, name: str) -> None:
@@ -159,7 +158,7 @@ class MotorMassComponent:
     """
 
     def __init__(
-        self, *, motor: Kraken | ThrustCurve, forward_axial_position: float, ignition_time: float,
+        self, *, motor: Kraken, forward_axial_position: float, ignition_time: float,
     ) -> None:
         _require_nonnegative(motor.p_mass, "Initial propellant mass")
         _require_positive(motor.dry_mass, "Motor dry mass")
