@@ -12,11 +12,16 @@ from typing import Callable
 
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy.optimize import brentq
 
 from vehicle import Vehicle
 from atmosphere import Atmosphere, isa
 
 G = 9.80665
+
+
+class FlightError(RuntimeError):
+    """The supplied candidate could not complete the requested ascent."""
 
 
 @dataclass(frozen=True)
@@ -86,7 +91,8 @@ def simulate(
     wind_x is a constant signed speed in m/s (+x). Motor ignition times and
     separation_time use the vehicle's flight clock, unchanged by this function.
     Separation drops booster mass/drag area/thrust without changing velocity.
-    Requires upward initial motion or sufficient initial thrust for liftoff.
+    Starts on the pad when all initial velocities and height are zero; waits
+    until thrust exceeds weight. No launch rail or attitude dynamics is modeled.
     Raises if apogee is not reached by max_time. Output times are adaptive and
     include propulsion/configuration events; event samples use post-event data.
     """
@@ -123,12 +129,13 @@ def simulate(
         mass = structural_mass
         thrust = 0.0
         for motor in motors:
-            fraction = np.clip((t - motor.ignition_time) / motor.motor.burn_time, 0., 1.)
-            mass += motor.motor.dry_mass + motor.motor.p_mass * (1. - fraction)
-            active = (motor.ignition_time <= t < motor.ignition_time + motor.motor.burn_time
-                      if burning is None else motor in burning)
-            if active:
-                thrust += motor.motor.get_thrust_properties(ambient.pressure / 100000.)[0]
+            elapsed = t - motor.ignition_time
+            mass += motor.motor.dry_mass + float(motor.motor.remaining_propellant_mass(elapsed))
+            if burning is None or motor in burning:
+                # At an interval's right endpoint, use its left-limit thrust.
+                if burning is not None:
+                    elapsed = np.clip(elapsed, 0., np.nextafter(motor.motor.burn_time, 0.))
+                thrust += float(motor.motor.thrust(elapsed, ambient.pressure))
         if not isfinite(mass) or mass <= 0:
             raise ValueError("Flight mass must be finite and positive.")
         airspeed = float(np.hypot(vx - wind_x, vz))
@@ -139,12 +146,6 @@ def simulate(
         if not isfinite(cd) or cd < 0:
             raise ValueError("Drag model must return a finite nonnegative Cd.")
         return state, ambient, thrust, cd
-
-    state, ambient, thrust, cd = evaluate(0., y, 0. >= vehicle.separation_time)
-    vertical_drag = 0.5 * ambient.density * state.airspeed * cd * (
-        pi * state.reference_diameter**2 / 4) * state.vz
-    if y[3] == 0 and thrust - vertical_drag <= state.mass * G:
-        raise ValueError("Insufficient initial thrust for liftoff; pad waiting is not modeled.")
 
     def apogee_event(t, values):
         return values[3]
@@ -158,15 +159,42 @@ def simulate(
     boundaries = {0., max_time}
     for motor in (vehicle.upper_stage.motor, vehicle.booster_stage.motor):
         boundaries.update((motor.ignition_time, motor.ignition_time + motor.motor.burn_time))
+        for knot in getattr(motor.motor, "times", ()):
+            boundaries.add(motor.ignition_time + float(knot))
     boundaries.add(vehicle.separation_time)
     boundaries = sorted(t for t in boundaries if 0 <= t <= max_time)
     times, states = [], []
+    on_pad = y[1] == 0 and y[2] == 0 and y[3] == 0
+    if y[3] == 0 and not on_pad:
+        raise FlightError("An airborne initial state must have positive vertical velocity.")
     reached_apogee = False
     for start, end in zip(boundaries, boundaries[1:]):
         midpoint = (start + end) / 2
         upper_only = midpoint >= vehicle.separation_time
         burning = tuple(m for m in configurations[upper_only][1]
                         if m.ignition_time <= midpoint < m.ignition_time + m.motor.burn_time)
+
+        if on_pad:
+            def net_lift(t):
+                state, _, thrust, _ = evaluate(t, y, upper_only, burning)
+                return thrust - state.mass * G
+
+            if not times:
+                times.append(start)
+                states.append(y.copy())
+            if net_lift(start) > 0:
+                liftoff = start
+            elif net_lift(end) > 0:
+                liftoff = brentq(net_lift, start, end, xtol=1e-12)
+            else:
+                times.append(end)
+                states.append(y.copy())
+                continue
+            if liftoff > times[-1]:
+                times.append(liftoff)
+                states.append(y.copy())
+            start = liftoff
+            on_pad = False
 
         def derivative(t, values):
             state, ambient, thrust, cd = evaluate(t, values, upper_only, burning)
@@ -178,7 +206,7 @@ def simulate(
         solution = solve_ivp(derivative, (start, end), y, events=apogee_event,
                              max_step=max_step, rtol=rtol, atol=atol)
         if not solution.success:
-            raise RuntimeError(solution.message)
+            raise FlightError(solution.message)
         skip = 1 if times else 0
         times.extend(solution.t[skip:])
         states.extend(solution.y.T[skip:])
@@ -187,7 +215,7 @@ def simulate(
             reached_apogee = True
             break
     if not reached_apogee:
-        raise RuntimeError("Apogee not reached; increase max_time or check vehicle inputs.")
+        raise FlightError("No liftoff or apogee before max_time; check vehicle inputs.")
 
     profiles = {name: [] for name in Trajectory.__dataclass_fields__}
     for t, values in zip(times, states):

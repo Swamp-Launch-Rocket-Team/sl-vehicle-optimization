@@ -1,10 +1,11 @@
-"""Barrowman subsonic stability calculations using shared vehicle geometry."""
+"""Small-angle vehicle stability with OpenRocket-style fin CP and force models."""
 
 from math import isfinite, pi
 
 import numpy as np
 
 from geometry import AxisymmetricSection, FinSet
+from fin_cp import fin_cp_location
 
 
 class StabilityBarrowman:
@@ -34,7 +35,7 @@ class StabilityBarrowman:
             raise ValueError("Reference diameter must be finite and positive.")
 
     def set_mach_number(self, mach_number_vector) -> None:
-        """Store a Mach vector and compute beta; stability remains subsonic."""
+        """Store a nonnegative Mach vector and its compressibility factor."""
         mach_number = np.array(mach_number_vector, dtype=float, copy=True)
         if mach_number.ndim != 1:
             raise ValueError("Mach numbers must be a one-dimensional vector.")
@@ -97,29 +98,47 @@ class StabilityBarrowman:
 
 
     def fin_normal_force_coefficient_derivative(self, fin_set: FinSet) -> np.ndarray:
-        """Equation 3-12 with the combined body-interference correction for one set."""
+        """Zero-AoA fin-set slope, per radian, on the vehicle reference area.
+
+        Subsonic: Eq. 3.40. Supersonic: Eqs. 3.42 and 3.49 as printed.
+        Fin-count and body corrections: Eqs. 3.53-3.56.
+        Mach 0.8-1.2 uses an engineering linear bridge, NOT a documented
+        OpenRocket interpolation or a validated transonic model.
+        """
         if not hasattr(self, "mach_number"):
             raise ValueError("Set the Mach number before evaluating stability.")
-        if np.any(self.mach_number >= 1):
-            raise ValueError("Equation 3-12 requires subsonic Mach numbers.")
+        count = fin_set.number_of_fins
+        if count < 3:
+            raise ValueError("This model requires at least 3 equally spaced, uncanted fins.")
 
-        return (
-            fin_set.number_of_fins
-            * pi
-            * fin_set.fin_aspect_ratio
-            * (fin_set.fin_planform_area / self.reference_cross_sectional_area)
-            / (
-                2
-                + np.sqrt(
-                    4
-                    + (
-                        self.compressibility_factor
-                        * fin_set.fin_aspect_ratio
-                        / np.cos(fin_set.fin_midchord_sweep_angle)
-                    ) ** 2
-                )
-            )
-        ) * (1 + 1 / fin_set.fin_tip_to_body_radius_ratio)
+        area_ratio = fin_set.fin_planform_area / self.reference_cross_sectional_area
+        aspect_ratio = fin_set.fin_aspect_ratio
+        sweep_cosine = np.cos(fin_set.fin_midchord_sweep_angle)
+
+        def subsonic(mach):
+            beta = np.sqrt(1.0 - mach**2)
+            return (2.0 * pi * aspect_ratio * area_ratio
+                    / (2.0 + np.sqrt(4.0 + (beta * aspect_ratio / sweep_cosine)**2)))
+
+        def supersonic(mach):
+            return area_ratio * 2.0 / np.sqrt(mach**2 - 1.0)
+
+        mach = self.mach_number
+        single_fin = np.empty_like(mach)
+        low = mach <= 0.8
+        high = mach >= 1.2
+        middle = ~(low | high)
+        single_fin[low] = subsonic(mach[low])
+        single_fin[high] = supersonic(mach[high])
+        weight = (mach[middle] - 0.8) / 0.4
+        single_fin[middle] = ((1.0 - weight) * subsonic(0.8)
+                              + weight * supersonic(1.2))
+
+        # Treat each set independently; cross-set interference is not modeled.
+        fin_interference = {3: 1.0, 4: 1.0, 5: 0.948, 6: 0.913,
+                            7: 0.854, 8: 0.810}.get(count, 0.750)
+        body_interference = 1.0 + 1.0 / fin_set.fin_tip_to_body_radius_ratio
+        return single_fin * (count / 2.0) * fin_interference * body_interference
 
     @property
     def body_normal_force_coefficient_derivative(self) -> float:
@@ -147,8 +166,6 @@ class StabilityBarrowman:
         """Equation 3-106 with combined interference for each fin set."""
         if not hasattr(self, "mach_number"):
             raise ValueError("Set the Mach number before evaluating stability.")
-        if np.any(self.mach_number >= 1):
-            raise ValueError("Subsonic stability requires Mach numbers below one.")
         total_derivative = np.full_like(
             self.mach_number, self.body_normal_force_coefficient_derivative,
         )
@@ -166,6 +183,9 @@ class StabilityBarrowman:
         for fin_set in self.fin_sets:
             normal_force_moment_derivative += (
                 self.fin_normal_force_coefficient_derivative(fin_set)
-                * fin_set.fin_center_of_pressure
+                * np.array([fin_cp_location(fin_set, float(m))
+                            for m in self.mach_number])
             )
+        if np.any(~np.isfinite(total_derivative) | (np.abs(total_derivative) < 1e-12)):
+            raise ValueError("Vehicle CP is undefined: total normal-force slope is zero or invalid.")
         return normal_force_moment_derivative / total_derivative

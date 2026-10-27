@@ -1,7 +1,6 @@
 """Mach-dependent thin-fin CP, adapted to this repository's FinSet geometry.
 
 OpenRocket technical documentation v13.05, section 3.2.2, equations 3.30-3.36:
-https://openrocket.sourceforge.net/techdoc.pdf
 
 This locates a FIN SET's CP, not the combined vehicle CP. It does not supply
 supersonic normal-force slopes, body CP, or a whole-vehicle stability model.

@@ -10,6 +10,7 @@ import numpy as np
 
 from geometry import AxisymmetricSection, FinSet
 from kraken import Kraken
+from thrust_curve import ThrustCurve
 
 
 def _require_positive(value: float, name: str) -> None:
@@ -84,6 +85,22 @@ class ShellMassComponent:
         return self.forward_axial_position + axial_volume_moment / material_volume
 
 
+class GeometryOnlyComponent:
+    """Exposed motor casing geometry; its mass is already in the motor."""
+
+    def __init__(self, *, section: AxisymmetricSection):
+        self.section = section
+        self.forward_axial_position = 0.0
+
+    @property
+    def mass(self):
+        return 0.0
+
+    @property
+    def center_of_mass(self):
+        return self.forward_axial_position + self.section.length / 2
+
+
 class FinMassComponent:
     """All fins in one set, with uniform thickness and material density."""
 
@@ -135,14 +152,14 @@ def _as_time_vector(time_vector) -> np.ndarray:
 
 
 class MotorMassComponent:
-    """Kraken hardware and linearly depleted propellant at a fixed motor midpoint.
+    """Motor hardware and propellant at a fixed motor midpoint.
 
     Time and ignition time are in seconds on the same flight clock. Burnout
     leaves dry hardware attached; stage separation is handled by the vehicle.
     """
 
     def __init__(
-        self, *, motor: Kraken, forward_axial_position: float, ignition_time: float,
+        self, *, motor: Kraken | ThrustCurve, forward_axial_position: float, ignition_time: float,
     ) -> None:
         _require_nonnegative(motor.p_mass, "Initial propellant mass")
         _require_positive(motor.dry_mass, "Motor dry mass")
@@ -160,10 +177,7 @@ class MotorMassComponent:
 
     def remaining_propellant_mass(self, time_vector) -> np.ndarray:
         flight_times = _as_time_vector(time_vector)
-        burned_fraction = np.clip(
-            (flight_times - self.ignition_time) / self.motor.burn_time, 0, 1,
-        )
-        return self.motor.p_mass * (1 - burned_fraction)
+        return self.motor.remaining_propellant_mass(flight_times - self.ignition_time)
 
     def total_mass(self, time_vector) -> np.ndarray:
         return self.motor.dry_mass + self.remaining_propellant_mass(time_vector)
@@ -180,7 +194,7 @@ class MassModel:
     def __init__(
         self,
         *,
-        components: tuple[ShellMassComponent | FinMassComponent | FixedMassComponent, ...],
+        components: tuple[ShellMassComponent | GeometryOnlyComponent | FinMassComponent | FixedMassComponent, ...],
         motors: tuple[MotorMassComponent, ...] = (),
     ) -> None:
         self.components = tuple(components)

@@ -43,6 +43,24 @@ def isa(altitude: float) -> Atmosphere:
                       sqrt(1.4 * R_AIR * temperature))
 
 
+def isa_with_tail(altitude: float) -> Atmosphere:
+    """ISA below 86 km, an isothermal exponential tail above (not upper ISA).
+
+    This preliminary extension lets high-apogee candidates finish integration.
+    It does not model thermospheric temperature or changing gas composition.
+    """
+    radius = 6356766.0
+    top = radius * 84852.0 / (radius - 84852.0)
+    if altitude <= top:
+        return isa(altitude)
+    if not isfinite(altitude):
+        raise ValueError("Altitude must be finite.")
+    base = isa(top - 1e-6)
+    factor = exp(-G * (altitude - top) / (R_AIR * base.temperature))
+    return Atmosphere(base.temperature, base.pressure*factor,
+                      base.density*factor, base.speed_of_sound)
+
+
 class ConstantAtmosphere:
     """Hold dry-air conditions fixed throughout a flight.
 

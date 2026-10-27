@@ -1,0 +1,52 @@
+{
+  "fixed_inputs": {
+    "outer_diameter_in": 4.02,
+    "inner_diameter_in": 3.9,
+    "fiberglass_density_oz_in3": 1.07,
+    "carbon_density_oz_in3": 1.03,
+    "stage1_fin_density_oz_in3": 1.03,
+    "stage2_fin_density_oz_in3": 1.56,
+    "fin_thickness_in": 0.125,
+    "fin_count": 4,
+    "stage1_taper_ratio": 0.25,
+    "stage2_taper_ratio": 0.2,
+    "nose_internal_mass_lb": 3.5,
+    "stage1_internal_mass_lb": 5.615,
+    "stage2_internal_mass_lb": 1.7,
+    "booster_ignition_time_s": 0.0,
+    "separation_time_s": 11.0
+  },
+  "initial_design": {
+    "nose_length_in": 18.0,
+    "stage1_airframe_length_in": 21.0,
+    "stage2_airframe_length_in": 21.0,
+    "coast_time_s": 9.0,
+    "stage1_root_chord_in": 16.0,
+    "stage2_root_chord_in": 10.5,
+    "stage1_sweep_deg": 66.5,
+    "stage2_sweep_deg": 65.5,
+    "stage1_span_in": 6.5,
+    "stage2_span_in": 4.5
+  },
+  "simulation": {
+    "atmosphere": "isa-tail",
+    "launch_altitude": 0.0,
+    "wind_x": 0.0,
+    "initial_conditions": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "constant_temperature": 288.15,
+    "constant_pressure": 101325.0,
+    "max_time": 600.0,
+    "max_step": 0.2,
+    "rtol": 1e-07,
+    "atol": 1e-08
+  },
+  "stability": {
+    "minimum": 2.1,
+    "maximum": 7.5
+  }
+}

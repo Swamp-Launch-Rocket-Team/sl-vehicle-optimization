@@ -74,3 +74,11 @@ class Kraken:
 
 
 
+
+    def thrust(self, elapsed_time, pressure_pa):
+        if 0 <= elapsed_time < self.burn_time:
+            return self.get_thrust_properties(pressure_pa / 100000.0)[0]
+        return 0.0
+
+    def remaining_propellant_mass(self, elapsed_time):
+        return self.p_mass * (1.0 - np.clip(np.asarray(elapsed_time) / self.burn_time, 0, 1))

@@ -6,7 +6,7 @@ import numpy as np
 
 from mass_model import (
     FinMassComponent, FixedMassComponent, MassModel, MotorMassComponent,
-    ShellMassComponent,
+    ShellMassComponent, GeometryOnlyComponent,
 )
 from stability_barrowman import StabilityBarrowman
 
@@ -21,7 +21,7 @@ class VehicleStage:
     def __init__(
         self,
         *,
-        body_sections: tuple[ShellMassComponent, ...],
+        body_sections: tuple[ShellMassComponent | GeometryOnlyComponent, ...],
         fin_sets: tuple[FinMassComponent, ...],
         motor: MotorMassComponent,
         fixed_components: tuple[FixedMassComponent, ...] = (),
@@ -126,8 +126,8 @@ class Vehicle:
         mach_numbers = np.asarray(mach_number_vector, dtype=float)
         if mach_numbers.shape != flight_times.shape:
             raise ValueError("Mach numbers and flight times must have matching vector shapes.")
-        if not np.all(np.isfinite(mach_numbers) & (mach_numbers >= 0) & (mach_numbers < 1)):
-            raise ValueError("Stability requires finite Mach numbers satisfying 0 <= Mach < 1.")
+        if not np.all(np.isfinite(mach_numbers) & (mach_numbers >= 0)):
+            raise ValueError("Stability requires finite, nonnegative Mach numbers.")
         result = np.empty_like(flight_times)
         before_separation = flight_times < self.separation_time
         for include_booster, mask in ((True, before_separation), (False, ~before_separation)):
