@@ -8,6 +8,8 @@
     "stage2_fin_density_oz_in3": 1.56,
     "fin_thickness_in": 0.125,
     "fin_count": 4,
+    "stage1_fin_cross_section": "square",
+    "stage2_fin_cross_section": "square",
     "stage1_taper_ratio": 0.25,
     "stage2_taper_ratio": 0.2,
     "nose_internal_mass_lb": 3.5,

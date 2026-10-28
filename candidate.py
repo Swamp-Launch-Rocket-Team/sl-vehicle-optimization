@@ -83,6 +83,8 @@ class VehicleConfig:
     stage2_fin_density_oz_in3: float = 1.56
     fin_thickness_in: float = 0.125
     fin_count: int = 4
+    stage1_fin_cross_section: str = "square"
+    stage2_fin_cross_section: str = "square"
     stage1_taper_ratio: float = 0.25
     stage2_taper_ratio: float = 0.20
     nose_internal_mass_lb: float = 3.5
@@ -92,13 +94,18 @@ class VehicleConfig:
     separation_time_s: float = 11.0
 
     def __post_init__(self):
-        if not all(np.isfinite(v) for v in asdict(self).values()):
+        numeric_inputs = asdict(self)
+        for name in ("stage1_fin_cross_section", "stage2_fin_cross_section"):
+            cross_section = numeric_inputs.pop(name)
+            if cross_section not in ("square", "rounded", "airfoil"):
+                raise ValueError(f"{name} must be square, rounded, or airfoil.")
+        if not all(np.isfinite(v) for v in numeric_inputs.values()):
             raise ValueError("Fixed vehicle inputs must be finite.")
         if not 0 < self.inner_diameter_in < self.outer_diameter_in:
             raise ValueError("Require 0 < inner diameter < outer diameter.")
         if type(self.fin_count) is not int or self.fin_count < 3:
             raise ValueError("Need at least three equally spaced fins.")
-        for name, value in asdict(self).items():
+        for name, value in numeric_inputs.items():
             if name in ("booster_ignition_time_s", "separation_time_s"):
                 if value < 0:
                     raise ValueError(f"{name} cannot be negative.")
@@ -144,14 +151,15 @@ class CandidateBuilder:
         booster_motor_start = upper_aft + booster_length
         booster_aft = booster_motor_start + stage1_motor.motor_length
 
-        def fins(root_in, span_in, sweep_deg, taper, aft, density):
+        def fins(root_in, span_in, sweep_deg, taper, aft, density, cross_section):
             root, span = root_in * INCH, span_in * INCH
             return FinMassComponent(fin_set=FinSet(
                 number_of_fins=c.fin_count, fin_root_chord=root,
                 fin_tip_chord=taper*root, fin_span=span,
                 fin_leading_edge_sweep_distance=span*tan(radians(sweep_deg)),
                 fin_leading_edge_axial_position=aft-root,
-                body_diameter_at_fin_attachment=2*radius),
+                body_diameter_at_fin_attachment=2*radius,
+                fin_cross_section=cross_section),
                 fin_thickness=c.fin_thickness_in*INCH,
                 material_density=density*OZ_PER_IN3)
 
@@ -160,7 +168,7 @@ class CandidateBuilder:
                            casing(stage2_motor.motor_length)),
             fin_sets=(fins(design.stage2_root_chord_in, design.stage2_span_in,
                            design.stage2_sweep_deg, c.stage2_taper_ratio, upper_aft,
-                           c.stage2_fin_density_oz_in3),),
+                           c.stage2_fin_density_oz_in3, c.stage2_fin_cross_section),),
             motor=MotorMassComponent(motor=stage2_motor,
                 forward_axial_position=upper_motor_start,
                 ignition_time=c.separation_time_s + design.coast_time_s),
@@ -174,7 +182,7 @@ class CandidateBuilder:
                            casing(stage1_motor.motor_length)),
             fin_sets=(fins(design.stage1_root_chord_in, design.stage1_span_in,
                            design.stage1_sweep_deg, c.stage1_taper_ratio, booster_aft,
-                           c.stage1_fin_density_oz_in3),),
+                           c.stage1_fin_density_oz_in3, c.stage1_fin_cross_section),),
             motor=MotorMassComponent(motor=stage1_motor,
                 forward_axial_position=booster_motor_start,
                 ignition_time=c.booster_ignition_time_s),

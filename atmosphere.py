@@ -14,6 +14,20 @@ class Atmosphere:
     density: float  # kg/m^3
     speed_of_sound: float  # m/s
 
+    @property
+    def dynamic_viscosity(self) -> float:
+        """Dry-air viscosity [Pa s] using OpenRocket's linear approximation."""
+        if not isfinite(self.temperature) or self.temperature <= 0:
+            raise ValueError("Temperature must be finite and positive (K).")
+        return 3.7291e-6 + 4.9944e-8 * self.temperature
+
+    @property
+    def kinematic_viscosity(self) -> float:
+        """Dry-air kinematic viscosity [m^2/s], dynamic viscosity / density."""
+        if not isfinite(self.density) or self.density <= 0:
+            raise ValueError("Density must be finite and positive (kg/m^3).")
+        return self.dynamic_viscosity / self.density
+
 
 def isa(altitude: float) -> Atmosphere:
     """Dry standard atmosphere, geometric altitude 0 to ~86 km MSL.

@@ -4,7 +4,7 @@ Lengths are in meters, areas in square meters, volumes in cubic meters,
 and angles in radians. Axial positions are measured aft from the nose tip.
 """
 
-from math import atan2, isfinite, pi
+from math import atan2, hypot, isfinite, pi, sqrt
 from typing import Callable
 
 
@@ -39,6 +39,42 @@ class AxisymmetricSection:
     @property
     def aft_cross_sectional_area(self) -> float:
         return self.cross_sectional_area(self.length)
+
+    @property
+    def maximum_diameter(self) -> float:
+        """Maximum sampled diameter [m], using 256 axial intervals.
+
+        Narrow peaks between samples may be missed for arbitrary profiles.
+        """
+        interval_count = 256
+        maximum_area = max(
+            self.forward_cross_sectional_area, self.aft_cross_sectional_area,
+        )
+        for sample_index in range(1, interval_count):
+            axial_distance = self.length * sample_index / interval_count
+            maximum_area = max(maximum_area, self.cross_sectional_area(axial_distance))
+        return 2 * sqrt(maximum_area / pi)
+
+    @property
+    def external_wetted_area(self) -> float:
+        """External lateral area [m^2] from 256 conical-frustum segments.
+
+        End disks are excluded. Curved profiles are approximated by straight
+        segments between radial samples.
+        """
+        interval_count = 256
+        interval_length = self.length / interval_count
+        previous_radius = sqrt(self.forward_cross_sectional_area / pi)
+        wetted_area = 0.0
+        for sample_index in range(1, interval_count + 1):
+            axial_distance = sample_index * interval_length
+            if sample_index == interval_count:
+                axial_distance = self.length
+            radius = sqrt(self.cross_sectional_area(axial_distance) / pi)
+            slant_length = hypot(interval_length, radius - previous_radius)
+            wetted_area += pi * (previous_radius + radius) * slant_length
+            previous_radius = radius
+        return wetted_area
 
     @property
     def external_volume(self) -> float:
@@ -77,6 +113,7 @@ class FinSet:
         fin_leading_edge_sweep_distance: float,
         fin_leading_edge_axial_position: float,
         body_diameter_at_fin_attachment: float,
+        fin_cross_section: str = "square",
     ) -> None:
         self.number_of_fins = number_of_fins
         self.fin_root_chord = fin_root_chord
@@ -85,6 +122,9 @@ class FinSet:
         self.fin_leading_edge_sweep_distance = fin_leading_edge_sweep_distance
         self.fin_leading_edge_axial_position = fin_leading_edge_axial_position
         self.body_diameter_at_fin_attachment = body_diameter_at_fin_attachment
+        if fin_cross_section not in ("square", "rounded", "airfoil"):
+            raise ValueError("Fin cross-section must be square, rounded, or airfoil.")
+        self.fin_cross_section = fin_cross_section
 
         if type(self.number_of_fins) is not int or self.number_of_fins <= 0:
             raise ValueError("Number of fins must be a positive integer.")
@@ -105,6 +145,13 @@ class FinSet:
     def fin_planform_area(self) -> float:
         """Planform area of one exposed fin."""
         return (self.fin_root_chord + self.fin_tip_chord) * self.fin_span / 2
+
+    @property
+    def fin_mean_aerodynamic_chord(self) -> float:
+        """Mean aerodynamic chord [m] of one exposed trapezoidal fin."""
+        root = self.fin_root_chord
+        tip = self.fin_tip_chord
+        return (2 / 3) * (root**2 + root * tip + tip**2) / (root + tip)
 
     @property
     def fin_aspect_ratio(self) -> float:

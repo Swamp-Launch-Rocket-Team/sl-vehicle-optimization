@@ -12,6 +12,7 @@ from scipy.optimize import minimize
 
 from candidate import CandidateBuilder, Design, VehicleConfig, VARIABLE_BOUNDS
 from constraint import Constraint
+from drag import drag_coefficient
 from evaluation import SimulationSettings, evaluate_candidate, model_identifier
 from objective import Objective
 from two_dof import constant_drag
@@ -25,8 +26,8 @@ def main(argv=None):
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--output", type=Path, default=Path("optimization_result.json"))
     parser.add_argument("--atmosphere", choices=("isa", "isa-tail", "constant"))
-    parser.add_argument("--drag", help="Replacement drag callback as module:function")
-    parser.add_argument("--drag-id", help="Version/settings identifier for custom drag and its data")
+    parser.add_argument("--drag", help="Replacement drag callback as module:function (default: drag:drag_coefficient)")
+    parser.add_argument("--drag-id", help="Version/settings identifier (default model: drag-v1; required for replacements)")
     args = parser.parse_args(argv)
     if args.maxiter < 1:
         parser.error("--maxiter must be positive")
@@ -41,13 +42,16 @@ def main(argv=None):
     if args.atmosphere:
         settings = replace(settings, atmosphere=args.atmosphere)
     settings.provider()
-    drag_model = constant_drag
+    drag_model = drag_coefficient
+    drag_identifier = args.drag_id
     if args.drag:
         if not args.drag_id:
             parser.error("--drag requires --drag-id to identify model/data changes")
         module, function = args.drag.split(":", 1)
         drag_model = getattr(importlib.import_module(module), function)
-    identifier = model_identifier(builder, drag_model, args.drag_id)
+    elif not drag_identifier:
+        drag_identifier = "drag-v1"
+    identifier = model_identifier(builder, drag_model, drag_identifier)
     evaluate = partial(evaluate_candidate, builder=builder, settings=settings,
                        cache_dir=args.cache_dir, identifier=identifier, drag_model=drag_model)
     objective = Objective(evaluate)

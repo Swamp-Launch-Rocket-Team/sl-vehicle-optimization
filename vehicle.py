@@ -62,6 +62,44 @@ class Vehicle:
         self.separation_time = separation_time
         self.stacked_reference_diameter = stacked_reference_diameter
         self.upper_stage_reference_diameter = upper_stage_reference_diameter
+        upper_maximum_diameter = self.nose_cone.section.maximum_diameter
+        for component in self.upper_stage.body_sections:
+            upper_maximum_diameter = max(
+                upper_maximum_diameter, component.section.maximum_diameter,
+            )
+        stacked_maximum_diameter = upper_maximum_diameter
+        for component in self.booster_stage.body_sections:
+            stacked_maximum_diameter = max(
+                stacked_maximum_diameter, component.section.maximum_diameter,
+            )
+        self._maximum_body_diameters = {
+            True: upper_maximum_diameter,
+            False: stacked_maximum_diameter,
+        }
+        upper_wetted_area = self.nose_cone.section.external_wetted_area
+        for component in self.upper_stage.body_sections:
+            upper_wetted_area += component.section.external_wetted_area
+        stacked_wetted_area = upper_wetted_area
+        for component in self.booster_stage.body_sections:
+            stacked_wetted_area += component.section.external_wetted_area
+        self._body_wetted_areas = {
+            True: upper_wetted_area,
+            False: stacked_wetted_area,
+        }
+
+    def maximum_body_diameter(self, *, upper_stage_only: bool = False) -> float:
+        """Precomputed maximum body diameter [m] for the active configuration.
+
+        Rebuild the vehicle after geometry edits to refresh these values.
+        """
+        return self._maximum_body_diameters[upper_stage_only]
+
+    def body_wetted_area(self, *, upper_stage_only: bool = False) -> float:
+        """Precomputed external lateral body area [m^2], including the nose.
+
+        Rebuild the vehicle after geometry edits to refresh these values.
+        """
+        return self._body_wetted_areas[upper_stage_only]
 
     def _build_models(self, include_booster: bool):
         # Rebuild the component lists so geometry edits and replacements are
