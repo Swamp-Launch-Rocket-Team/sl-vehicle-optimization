@@ -26,8 +26,8 @@ VARIABLE_BOUNDS = {
     "stage2_sweep_deg": (63.0, 68.0),
     "stage1_span_in": (6.0, 7.0),
     "stage2_span_in": (4.0, 5.0),
-    "stage1_propellant_mass_lb": (14.0, 16.0),
-    "stage2_propellant_mass_lb": (14.0, 16.0),
+    "stage1_propellant_mass_lb": (14.0, 27.4),
+    "stage2_propellant_mass_lb": (14.0, 27.4),
 }
 
 

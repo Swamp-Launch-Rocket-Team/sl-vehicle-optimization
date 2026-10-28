@@ -48,6 +48,16 @@ class Kraken:
         self.dry_mass = self.casing_mass + self.liner_mass + self.nozzle_mass + self.forward_closure_mass
         self.wet_mass = self.dry_mass + self.p_mass
         self.center_of_mass = self.motor_length / 2.0
+        self.reset_thrust_properties()
+
+    def reset_thrust_properties(self):
+        self.momentum_thrust = None
+        self.exit_pressure = None  # bar
+        self.exit_area = None  # m^2
+
+    def initialize_thrust(self, pressure_pa):
+        (self.momentum_thrust, self.burn_time, self.exit_pressure,
+         self.exit_area) = self.get_thrust_properties(pressure_pa / 100000.0)
 
     def get_mass_properties(self):
         return (self.dry_mass, self.wet_mass, self.center_of_mass, self.motor_length)
@@ -76,8 +86,12 @@ class Kraken:
 
 
     def thrust(self, elapsed_time, pressure_pa):
+        """Burn thrust [N] with fixed nozzle properties and ambient pressure [Pa]."""
         if 0 <= elapsed_time < self.burn_time:
-            return self.get_thrust_properties(pressure_pa / 100000.0)[0]
+            if self.momentum_thrust is None:
+                raise RuntimeError("Initialize thrust properties at ignition before evaluating a burn.")
+            pressure_thrust = (self.exit_pressure * 100000.0 - pressure_pa) * self.exit_area
+            return self.momentum_thrust + pressure_thrust
         return 0.0
 
     def remaining_propellant_mass(self, elapsed_time):

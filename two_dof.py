@@ -166,6 +166,9 @@ def simulate(
     if not isfinite(wind_x) or not isfinite(launch_altitude) or launch_altitude < 0:
         raise ValueError("Wind must be finite and launch altitude nonnegative.")
 
+    for stage in (vehicle.upper_stage, vehicle.booster_stage):
+        stage.motor.motor.reset_thrust_properties()
+
     # Geometry is fixed during each run. Integrate shell masses once, rather
     # than repeating the shell quadrature on every ODE evaluation. A fresh call
     # rebuilds these totals, so optimization geometry changes are respected.
@@ -254,6 +257,10 @@ def simulate(
         upper_only = midpoint >= vehicle.separation_time
         burning = tuple(m for m in configurations[upper_only][1]
                         if m.ignition_time <= midpoint < m.ignition_time + m.motor.burn_time)
+        for motor in burning:
+            if motor.ignition_time == start:
+                ignition_ambient = atmosphere_model(launch_altitude + state_vector[1])
+                motor.motor.initialize_thrust(ignition_ambient.pressure)
 
         def derivative(t, values):
             state, ambient, thrust, cd = evaluate(t, values, upper_only, burning)
